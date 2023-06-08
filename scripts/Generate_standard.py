@@ -152,7 +152,7 @@ def upscale_and_save_images(images, payload_copy, Eagle_Send):
     pprint.pprint(payload_copy, indent=4, sort_dicts=False)
     now = datetime.datetime.now()
     folder_name = now.strftime("%Y%m%d_%H%M%S")
-    output_folder = os.path.join('output', folder_name)
+    output_folder = os.path.join('outputs', 'Hires-Tiled-Diffusion-ControlNet-Tile-', folder_name)
     os.makedirs(output_folder, exist_ok=True)
     total_images = len(images)
     for i, image in tqdm(enumerate(images), total=total_images, desc='Upscaling and Saving Images'):
