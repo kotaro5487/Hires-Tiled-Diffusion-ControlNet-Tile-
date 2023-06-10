@@ -3,6 +3,7 @@ import gradio as gr
 import os
 from PIL import Image
 import json
+import subprocess
 
 from modules import script_callbacks
 from scripts.extension_script import get_image_metadata
@@ -17,6 +18,9 @@ def update_html(image):
     html = payload_html
     payload1 = json.dumps(payload)
     return html, payload1
+
+def open_folder(path):
+    subprocess.Popen(f'explorer {path}')
 
 
 
@@ -62,7 +66,9 @@ def on_ui_tabs():
                 value=2,
                 label="ScaleFactor"
             )
+            noise_inverse = gr.Checkbox(label='noise_inverse', value=False)
             Eagle_Send = gr.Checkbox(label='Eagle_Send', value=True)
+            pre_upscaled_image = gr.Checkbox(label='pre_upscaled_image', value=False)
         with gr.Column(variant='panel'):
             html = gr.HTML()
             payload1 = gr.Textbox(label="payload", visible=False)
@@ -70,14 +76,23 @@ def on_ui_tabs():
         with gr.Column(variant='panel'):
             button = gr.Button(label = "Generate")
             image_output = gr.Gallery(label="OutputImage", height=1920)
+            folder_botton = gr.Button(label="出力先を開く")
+            folder_pass = gr.Textbox(label="folder_pass", visible=False)
 
-            button.click(
+     
+
+        button.click(
             fn=main_generate,
-            inputs=[payload1, batch_size, count_size, encoder_size, decoder_size, Scale_Factor, Eagle_Send],
-            outputs=[image_output],
+            inputs=[payload1, batch_size, count_size, encoder_size, decoder_size, Scale_Factor, Eagle_Send, pre_upscaled_image, noise_inverse],
+            outputs=[image_output, folder_pass],
         )
 
-        
+
+        folder_botton.click(
+            fn=open_folder,
+            inputs=[folder_pass],
+            outputs=[],
+        )
         
 
         image_upload.change(
