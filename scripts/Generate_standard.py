@@ -10,60 +10,26 @@ import re
 
 url = "http://127.0.0.1:7860"
 
-def get_image_metadata(image_file):
-    image = Image.open(image_file)
-    metadata = image.info.get('parameters')
-    with open('metadata.txt', 'w') as file:
-        file.write(metadata)
-    with open('metadata.txt', 'r') as file:
-        text = file.read()
-    lines = text.split("\n")
-    prompt = lines[0]
-    negative_prompt = lines[1].replace("Negative prompt: ", "")
-    settings = lines[2].split(", ")
-    payload = {'prompt': prompt, 'negative_prompt': negative_prompt}
-    for setting in settings:
-        key, value = setting.split(": ", 1)
-        key = key.lower()
-        if value.isdigit():
-            value = int(value)
-        else:
-            try:
-                value = float(value)
-            except ValueError:
-                pass
-        payload[key] = value
-    width, height = map(int, payload.pop('size').split('x'))
-    payload['width'] = width
-    payload['height'] = height
-    payload['seed'] = -1
-    if "Hires upscale" in payload:
-        payload["hr_scale"] = payload["Hires upscale"]
-    if "Hires upscaler" in payload:
-        payload["hr_upscaler"] = payload["Hires upscaler"]
-    if "hr_scale" in payload and "hr_upscaler" in payload:
-        payload["enable_hr"] = True
-    if "Denoising strength" in payload:
-        payload["denoising_strength"] = payload["Denoising strength"]
-    if "CFG scale" in payload:
-        payload["cfg_scale"] = payload["CFG scale"]
-    keys_to_keep = ["enable_hr", "denoising_strength", "firstphase_width", "firstphase_height", "hr_scale", "hr_upscaler", "hr_second_pass_steps", "hr_resize_x", "hr_resize_y", "prompt", "styles", "seed", "subseed", "subseed_strength", "seed_resize_from_h", "seed_resize_from_w", "sampler_name", "batch_size", "n_iter", "steps", "cfg_scale", "width", "height", "restore_faces", "tiling", "do_not_save_samples", "do_not_save_grid", "negative_prompt", "eta", "s_churn", "s_tmax", "s_tmin", "s_noise", "override_settings", "override_settings_restore_afterwards", "script_args", "script_name", "sampler_index"]
-    payload = {k: v for k, v in payload.items() if k in keys_to_keep}
-    return payload
-
-
-def generate_initial_images(payload, batch_size, count_size):
+def generate_initial_images(payload, batch_size, count_size, pre_upscaled_image, output_folder):
     api = webuiapi.WebUIApi()
     results = []
     for _ in tqdm(range(count_size), desc='Rendering Initial Images'):
         payload['batch_size'] = batch_size
         result = api.txt2img(**payload)
         results.append(result)
+        if pre_upscaled_image:
+                pnginfo = PngImagePlugin.PngInfo()
+                pnginfo.add_text("parameters", result.info['infotexts'][0])
+                now = datetime.datetime.now()
+                date_string = now.strftime("%Y%m%d_%H%M%S")
+                new_filename = os.path.join("{}.png".format(date_string))
+                output_path = os.path.join(output_folder, new_filename)
+                result.image.save(output_path, pnginfo=pnginfo)
     images = [image for result in results for image in result.images]
     return images
 
 
-def prepare_high_res_settings(payload, encoder_size, decoder_size, Scale_Factor):
+def prepare_high_res_settings(payload, encoder_size, decoder_size, Scale_Factor, noise_inverse):
     payload_copy = dict(payload)
     keys_to_keep = ["prompt", "negative_prompt", "width", "height"]
     keys_to_remove = [key for key in payload_copy.keys() if key not in keys_to_keep]
@@ -85,7 +51,7 @@ def prepare_high_res_settings(payload, encoder_size, decoder_size, Scale_Factor)
         "tile_batch_size": 4,
         "upscaler_name": "4x-AnimeSharp",
         "scale_factor": Scale_Factor,
-        "noise_inverse": True,
+        "noise_inverse": noise_inverse,
         "noise_inverse_steps": 10,
         "noise_inverse_retouch": 1,
         "noise_inverse_renoise_strength": 0,
@@ -146,14 +112,10 @@ def extract_tags(infotext):
 
     return tags
 
-def upscale_and_save_images(images, payload_copy, Eagle_Send):
+def upscale_and_save_images(images, payload_copy, Eagle_Send, output_folder):
     image_list = []
     api = webuiapi.WebUIApi()
     pprint.pprint(payload_copy, indent=4, sort_dicts=False)
-    now = datetime.datetime.now()
-    folder_name = now.strftime("%Y%m%d_%H%M%S")
-    output_folder = os.path.join('outputs', 'Hires-Tiled-Diffusion-ControlNet-Tile-', folder_name)
-    os.makedirs(output_folder, exist_ok=True)
     total_images = len(images)
     for i, image in tqdm(enumerate(images), total=total_images, desc='Upscaling and Saving Images'):
         payload_copy["images"] = [image]
@@ -199,14 +161,13 @@ def is_iterable(obj):
     except TypeError:
         return False
 
-def main_generate(payload1, batch_size, count_size, encoder_size, decoder_size, Scale_Factor, Eagle_Send):
+def main_generate(payload1, batch_size, count_size, encoder_size, decoder_size, Scale_Factor, Eagle_Send, pre_upscaled_image, noise_inverse):
     payload = json.loads(payload1)
-    images = generate_initial_images(payload, batch_size, count_size)
-    payload_copy = prepare_high_res_settings(payload, encoder_size, decoder_size, Scale_Factor)
-    image_output = upscale_and_save_images(images, payload_copy, Eagle_Send)
-    return image_output
-
-
-
-if __name__ == "__main__":
-    main()
+    now = datetime.datetime.now()
+    folder_name = now.strftime("%Y%m%d_%H%M%S")
+    output_folder = os.path.join('outputs', 'Hires-Tiled-Diffusion-ControlNet-Tile-', folder_name)
+    os.makedirs(output_folder, exist_ok=True)
+    images = generate_initial_images(payload, batch_size, count_size, pre_upscaled_image, output_folder)
+    payload_copy = prepare_high_res_settings(payload, encoder_size, decoder_size, Scale_Factor, noise_inverse)
+    image_output = upscale_and_save_images(images, payload_copy, Eagle_Send, output_folder)
+    return image_output, output_folder
