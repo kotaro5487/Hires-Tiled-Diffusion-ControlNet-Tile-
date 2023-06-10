@@ -18,11 +18,38 @@ def get_image_metadata(image):
     with open('metadata.txt', 'w') as file:
         file.write(metadata)
     with open('metadata.txt', 'r') as file:
-        text = file.read()
-    lines = text.split("\n")
-    prompt = lines[0]
-    negative_prompt = lines[1].replace("Negative prompt: ", "")
-    settings = lines[2].split(", ")
+        content = file.read()
+
+    # "Negative prompt:" のインデックスを取得
+    negative_prompt_index = content.find("Negative prompt:")
+    steps_index = content.find("Steps:")
+
+    if steps_index != -1:
+        # "Steps:" の後の部分を取り出す
+        steps_section = content[steps_index:].strip()
+    else:
+        steps_section = "Stepsが見つかりませんでした"
+
+    if negative_prompt_index != -1:
+        # "Negative prompt:" の前の文章全体を取り出す
+        prompt = content[:negative_prompt_index].strip()
+
+        # "Negative prompt:" の後の行から "Steps:" の前の行までの部分を取り出す
+        start_index = negative_prompt_index + len("Negative prompt:")
+        end_index = content.index("Steps:") if steps_index != -1 else negative_prompt_index
+        negative_prompt = content[start_index:end_index].strip()
+    else:
+        prompt = content[:steps_index].strip()
+        negative_prompt = ""
+    # 結果を表示
+    print("prompt:")
+    print(prompt)
+    print("Negative promptが見つかりませんでした" if negative_prompt_index == -1 else "Negative prompt:")
+    print(negative_prompt)
+    print("Steps section:")
+    print(steps_section)
+
+    settings = steps_section.split(", ")
     payload = {'prompt': prompt, 'negative_prompt': negative_prompt}
     for setting in settings:
         key, value = setting.split(": ", 1)
